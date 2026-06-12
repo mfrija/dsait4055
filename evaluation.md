@@ -105,8 +105,8 @@ If an impression has only one label class, AUC is undefined for that impression 
 It performs these steps:
 
 1. Reads train and dev `news.tsv` files.
-2. Builds the vocabulary from training news titles, matching `nrms/pipeline.py`.
-3. Encodes all known train/dev news titles.
+2. Builds the vocabulary from training news title+abstract text, matching `nrms/pipeline.py`.
+3. Encodes all known train/dev news title+abstract text.
 4. Builds the NRMS architecture.
 5. Loads the checkpoint state dict from `nrms_simple.pt`.
 6. For each impression:
@@ -117,7 +117,7 @@ It performs these steps:
 
 The adapter uses the same constants from `nrms/pipeline.py`, including:
 
-- `TITLE_SIZE`
+- `ARTICLE_SIZE`
 - `HISTORY_SIZE`
 - `PAD_NEWS`
 - `PAD_WORD`
@@ -174,6 +174,6 @@ This helps verify whether the overlap/unseen split is balanced or heavily skewed
 
 ## Important Notes
 
-The current NRMS model is a simplified implementation that uses only news titles. Therefore, the evaluation scores measure this simplified title-only model, not a full MIND benchmark model.
+The current NRMS model is a simplified implementation that uses news titles and abstracts. Therefore, the evaluation scores measure this simplified title+abstract model, not a full MIND benchmark model.
 
 The evaluation is impression-level. It ranks only the candidates provided in each MIND impression. It does not retrieve candidates from the full news corpus.

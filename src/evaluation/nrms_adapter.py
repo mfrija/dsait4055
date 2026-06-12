@@ -39,14 +39,14 @@ class NRMSScorer:
         empty_history_strategy: str = "model",
         strict: bool = True,
     ) -> "NRMSScorer":
-        train_titles = nrms_pipeline.read_news_titles(train_news_path)
-        all_titles = dict(train_titles)
+        train_texts = nrms_pipeline.read_news_texts(train_news_path)
+        all_texts = dict(train_texts)
 
         for news_path in eval_news_paths:
-            all_titles.update(nrms_pipeline.read_news_titles(news_path))
+            all_texts.update(nrms_pipeline.read_news_texts(news_path))
 
-        vocab = nrms_pipeline.build_vocab(train_titles)
-        news = nrms_pipeline.encode_all_news(all_titles, vocab)
+        vocab = nrms_pipeline.build_vocab(train_texts)
+        news = nrms_pipeline.encode_all_news(all_texts, vocab)
         model = nrms_pipeline.NRMS(len(vocab))
 
         if checkpoint_path is not None:
