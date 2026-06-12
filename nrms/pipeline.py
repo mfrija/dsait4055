@@ -11,18 +11,19 @@ from torch.utils.data import DataLoader, Dataset
 
 
 DATA_DIR = Path("data/mind-small")
-TITLE_SIZE = 20
-HISTORY_SIZE = 20
+ARTICLE_SIZE = 80
+HISTORY_SIZE = 50
 NEGATIVES_PER_POSITIVE = 4
 MAX_VOCAB_SIZE = 30000
 BATCH_SIZE = 64
 EPOCHS = 1
-MAX_STEPS = 500
+MAX_STEPS = None
 EVAL_IMPRESSIONS = 1000
+MODEL_PATH = "nrms_simple.pt"
 
-EMBEDDING_DIM = 64
-ATTENTION_HEADS = 4
-ATTENTION_HIDDEN_DIM = 100
+EMBEDDING_DIM = 128
+ATTENTION_HEADS = 8
+ATTENTION_HIDDEN_DIM = 200
 DROPOUT = 0.2
 LEARNING_RATE = 0.0001
 
@@ -35,18 +36,20 @@ def tokenize(text):
     return re.findall(r"[a-z0-9]+(?:'[a-z0-9]+)?", text.lower())
 
 
-def read_news_titles(path):
+def read_news_texts(path):
     news = {}
     with open(path, encoding="utf-8") as file:
         for line in file:
             columns = line.rstrip("\n").split("\t")
-            news_id, title = columns[0], columns[3]
-            news[news_id] = tokenize(title)
+            news_id = columns[0]
+            title = columns[3]
+            abstract = columns[4] if len(columns) > 4 else ""
+            news[news_id] = tokenize(f"{title} {abstract}")
     return news
 
 
-def build_vocab(news_titles):
-    word_counts = Counter(word for title in news_titles.values() for word in title)
+def build_vocab(news_texts):
+    word_counts = Counter(word for article in news_texts.values() for word in article)
     vocab = {"<PAD>": PAD_WORD, "<UNK>": UNK_WORD}
 
     for word, _ in word_counts.most_common(MAX_VOCAB_SIZE - len(vocab)):
@@ -55,14 +58,14 @@ def build_vocab(news_titles):
     return vocab
 
 
-def encode_title(tokens, vocab):
-    ids = [vocab.get(word, UNK_WORD) for word in tokens[:TITLE_SIZE]]
-    return ids + [PAD_WORD] * (TITLE_SIZE - len(ids))
+def encode_article(tokens, vocab):
+    ids = [vocab.get(word, UNK_WORD) for word in tokens[:ARTICLE_SIZE]]
+    return ids + [PAD_WORD] * (ARTICLE_SIZE - len(ids))
 
 
-def encode_all_news(news_titles, vocab):
-    encoded = {news_id: encode_title(tokens, vocab) for news_id, tokens in news_titles.items()}
-    encoded[PAD_NEWS] = [PAD_WORD] * TITLE_SIZE
+def encode_all_news(news_texts, vocab):
+    encoded = {news_id: encode_article(tokens, vocab) for news_id, tokens in news_texts.items()}
+    encoded[PAD_NEWS] = [PAD_WORD] * ARTICLE_SIZE
     return encoded
 
 
@@ -181,13 +184,13 @@ class NewsEncoder(nn.Module):
         self.attention_pooling = AdditiveAttention(EMBEDDING_DIM)
         self.dropout = nn.Dropout(DROPOUT)
 
-    def forward(self, titles):
-        word_mask = titles.ne(PAD_WORD)
-        valid_titles = word_mask.any(dim=1)
+    def forward(self, articles):
+        word_mask = articles.ne(PAD_WORD)
+        valid_articles = word_mask.any(dim=1)
 
-        word_vectors = self.dropout(self.embedding(titles))
+        word_vectors = self.dropout(self.embedding(articles))
         padding_mask = ~word_mask
-        padding_mask = padding_mask.masked_fill(~valid_titles.unsqueeze(1), False)
+        padding_mask = padding_mask.masked_fill(~valid_articles.unsqueeze(1), False)
 
         contextual_words, _ = self.self_attention(
             word_vectors,
@@ -197,7 +200,7 @@ class NewsEncoder(nn.Module):
         )
 
         news_vectors = self.attention_pooling(contextual_words, word_mask)
-        return news_vectors.masked_fill(~valid_titles.unsqueeze(1), 0.0)
+        return news_vectors.masked_fill(~valid_articles.unsqueeze(1), 0.0)
 
 
 class NRMS(nn.Module):
@@ -213,9 +216,9 @@ class NRMS(nn.Module):
         self.user_attention_pooling = AdditiveAttention(EMBEDDING_DIM)
 
     def encode_user(self, history):
-        batch_size, history_size, title_size = history.shape
+        batch_size, history_size, article_size = history.shape
 
-        clicked_news = history.reshape(batch_size * history_size, title_size)
+        clicked_news = history.reshape(batch_size * history_size, article_size)
         clicked_vectors = self.news_encoder(clicked_news)
         clicked_vectors = clicked_vectors.reshape(batch_size, history_size, EMBEDDING_DIM)
 
@@ -230,11 +233,11 @@ class NRMS(nn.Module):
         return self.user_attention_pooling(contextual_clicks, history_mask)
 
     def forward(self, history, candidates):
-        batch_size, candidate_count, title_size = candidates.shape
+        batch_size, candidate_count, article_size = candidates.shape
 
         user_vector = self.encode_user(history)
-        candidate_titles = candidates.reshape(batch_size * candidate_count, title_size)
-        candidate_vectors = self.news_encoder(candidate_titles)
+        candidate_articles = candidates.reshape(batch_size * candidate_count, article_size)
+        candidate_vectors = self.news_encoder(candidate_articles)
         candidate_vectors = candidate_vectors.reshape(batch_size, candidate_count, EMBEDDING_DIM)
 
         return torch.bmm(candidate_vectors, user_vector.unsqueeze(2)).squeeze(2)
@@ -268,10 +271,10 @@ def main():
     train_dir = DATA_DIR / "MINDsmall_train" / "MINDsmall_train"
     dev_dir = DATA_DIR / "MINDsmall_dev" / "MINDsmall_dev"
 
-    train_titles = read_news_titles(train_dir / "news.tsv")
-    dev_titles = read_news_titles(dev_dir / "news.tsv")
-    vocab = build_vocab(train_titles)
-    news = encode_all_news({**train_titles, **dev_titles}, vocab)
+    train_texts = read_news_texts(train_dir / "news.tsv")
+    dev_texts = read_news_texts(dev_dir / "news.tsv")
+    vocab = build_vocab(train_texts)
+    news = encode_all_news({**train_texts, **dev_texts}, vocab)
 
     train_data = MindTrainDataset(train_dir / "behaviors.tsv", news)
     dev_data = MindEvalDataset(dev_dir / "behaviors.tsv", news)
@@ -316,8 +319,9 @@ def main():
         if MAX_STEPS and step >= MAX_STEPS:
             break
 
-    torch.save(model.state_dict(), "nrms_simple.pt")
-    print("saved model to nrms_simple.pt")
+    if MODEL_PATH:
+        torch.save(model.state_dict(), MODEL_PATH)
+        print(f"saved model to {MODEL_PATH}")
 
 
 if __name__ == "__main__":
