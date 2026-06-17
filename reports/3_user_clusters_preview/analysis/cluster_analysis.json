@@ -1,0 +1,68 @@
+{
+  "total_users": 49108,
+  "cluster_count": 3,
+  "cluster_sizes": {
+    "0": 17099,
+    "1": 17509,
+    "2": 14500
+  },
+  "largest_cluster_share": 0.3565406858353018,
+  "smallest_cluster_share": 0.29526757351144417,
+  "largest_to_smallest_ratio": 1.2075172413793103,
+  "silhouette_2d_pca_sampled": 0.2654801470702531,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 17099,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.3316117047892576,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "football_nfl",
+        "newspolitics"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 17509,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.346069697492193,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newspolitics",
+        "football_nfl"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 14500,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.40518958541745975,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newscrime",
+        "tv-celebrity"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.9979358315467834,
+    "max_off_diagonal": 0.9983495473861694,
+    "min_off_diagonal": 0.997113823890686
+  }
+}

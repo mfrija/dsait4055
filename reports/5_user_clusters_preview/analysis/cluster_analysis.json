@@ -1,0 +1,102 @@
+{
+  "total_users": 49108,
+  "cluster_count": 5,
+  "cluster_sizes": {
+    "0": 9194,
+    "1": 9984,
+    "2": 15956,
+    "3": 6084,
+    "4": 7890
+  },
+  "largest_cluster_share": 0.32491651054817955,
+  "smallest_cluster_share": 0.1238902011892156,
+  "largest_to_smallest_ratio": 2.6226166995397766,
+  "silhouette_2d_pca_sampled": 0.11933508287456057,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 9194,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.37814062299705165,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newspolitics",
+        "football_nfl"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 9984,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.30540851066829255,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "football_nfl",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 15956,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.37595247766628925,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newspolitics",
+        "football_nfl"
+      ]
+    },
+    {
+      "cluster": 3,
+      "user_count": 6084,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.4006482622968986,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newscrime",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 4,
+      "user_count": 7890,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.31097296358981036,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "football_nfl",
+        "newspolitics"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.99701327085495,
+    "max_off_diagonal": 0.9986444711685181,
+    "min_off_diagonal": 0.9918192028999329
+  }
+}
