@@ -3,6 +3,7 @@ import random
 import re
 import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,7 @@ LOG_INTERVAL_STEPS = 50
 CHECKPOINT_INTERVAL_STEPS = None
 VALIDATION_K_VALUES = (5, 10)
 VALIDATION_NEWS_BATCH_SIZE = 512
+MIND_TIMESTAMP_FORMAT = "%m/%d/%Y %I:%M:%S %p"
 BEST_MODEL_METRIC = "auc"
 
 EMBEDDING_DIM = 100
@@ -152,23 +154,57 @@ def parse_impression_list(text):
     return impressions
 
 
+def iter_behavior_lines(source):
+    if isinstance(source, (str, Path)):
+        with open(source, encoding="utf-8") as file:
+            yield from file
+        return
+
+    yield from source
+
+
+def behavior_timestamp(line):
+    columns = line.rstrip("\n").split("\t")
+    if len(columns) != 5:
+        raise ValueError(f"Expected 5 columns in behaviors row, got {len(columns)}")
+    return datetime.strptime(columns[2], MIND_TIMESTAMP_FORMAT)
+
+
+def mind_last_day_behavior_split(path):
+    with open(path, encoding="utf-8") as file:
+        lines = list(file)
+
+    if len(lines) < 2:
+        raise ValueError("Need at least two behavior rows to create train and validation splits")
+
+    lines.sort(key=behavior_timestamp)
+    validation_date = behavior_timestamp(lines[-1]).date()
+    split_index = len(lines) - 1
+    while split_index > 0 and behavior_timestamp(lines[split_index - 1]).date() == validation_date:
+        split_index -= 1
+
+    if split_index == 0:
+        raise ValueError("Last-day split left no behavior rows for training")
+
+    return lines[:split_index], lines[split_index:]
+
+
 class MindTrainDataset(Dataset):
-    def __init__(self, behaviors_path, news):
+    def __init__(self, behaviors_source, news):
         self.news = news
         self.samples = []
 
-        with open(behaviors_path, encoding="utf-8") as file:
-            for line in file:
-                columns = line.rstrip("\n").split("\t")
-                history = columns[3].split()
-                impressions = parse_impression_list(columns[4])
+        for line in iter_behavior_lines(behaviors_source):
+            columns = line.rstrip("\n").split("\t")
+            history = columns[3].split()
+            impressions = parse_impression_list(columns[4])
 
-                clicked = [news_id for news_id, label in impressions if label == 1]
-                ignored = [news_id for news_id, label in impressions if label == 0]
+            clicked = [news_id for news_id, label in impressions if label == 1]
+            ignored = [news_id for news_id, label in impressions if label == 0]
 
-                if history and clicked and ignored:
-                    for clicked_news in clicked:
-                        self.samples.append((history, clicked_news, ignored))
+            if history and clicked and ignored:
+                for clicked_news in clicked:
+                    self.samples.append((history, clicked_news, ignored))
 
     def __len__(self):
         return len(self.samples)
@@ -194,20 +230,19 @@ class MindTrainDataset(Dataset):
 
 
 class MindEvalDataset(Dataset):
-    def __init__(self, behaviors_path, news):
+    def __init__(self, behaviors_source, news):
         self.news = news
         self.impressions = []
 
-        with open(behaviors_path, encoding="utf-8") as file:
-            for line in file:
-                columns = line.rstrip("\n").split("\t")
-                history = columns[3].split()
-                impression = parse_impression_list(columns[4])
-                labels = [label for _, label in impression]
+        for line in iter_behavior_lines(behaviors_source):
+            columns = line.rstrip("\n").split("\t")
+            history = columns[3].split()
+            impression = parse_impression_list(columns[4])
+            labels = [label for _, label in impression]
 
-                if history and len(set(labels)) == 2:
-                    candidates = [news_id for news_id, _ in impression]
-                    self.impressions.append((history, candidates, labels))
+            if history and len(set(labels)) == 2:
+                candidates = [news_id for news_id, _ in impression]
+                self.impressions.append((history, candidates, labels))
 
     def __len__(self):
         return len(self.impressions)
@@ -539,12 +574,11 @@ def main():
     torch.manual_seed(42)
 
     train_dir = DATA_DIR / "MINDsmall_train" / "MINDsmall_train"
-    dev_dir = DATA_DIR / "MINDsmall_dev" / "MINDsmall_dev"
+    train_behaviors_path = train_dir / "behaviors.tsv"
 
     train_texts = read_news_texts(train_dir / "news.tsv")
-    dev_texts = read_news_texts(dev_dir / "news.tsv")
     vocab = build_vocab(train_texts)
-    news = encode_all_news({**train_texts, **dev_texts}, vocab)
+    news = encode_all_news(train_texts, vocab)
     pretrained_embeddings = None
     glove_stats = None
 
@@ -561,8 +595,26 @@ def main():
             flush=True,
         )
 
-    train_data = MindTrainDataset(train_dir / "behaviors.tsv", news)
-    dev_data = MindEvalDataset(dev_dir / "behaviors.tsv", news)
+    train_behavior_lines, validation_behavior_lines = mind_last_day_behavior_split(
+        train_behaviors_path
+    )
+    split_metadata = {
+        "strategy": "mind_last_training_day",
+        "train_behavior_rows": len(train_behavior_lines),
+        "validation_behavior_rows": len(validation_behavior_lines),
+        "train_start": behavior_timestamp(train_behavior_lines[0]).isoformat(),
+        "train_end": behavior_timestamp(train_behavior_lines[-1]).isoformat(),
+        "validation_start": behavior_timestamp(validation_behavior_lines[0]).isoformat(),
+        "validation_end": behavior_timestamp(validation_behavior_lines[-1]).isoformat(),
+        "validation_date": behavior_timestamp(validation_behavior_lines[0]).date().isoformat(),
+        "source": str(train_behaviors_path),
+        "final_evaluation_split": "MINDsmall_dev",
+    }
+
+    train_data = MindTrainDataset(train_behavior_lines, news)
+    validation_data = MindEvalDataset(validation_behavior_lines, news)
+    del train_behavior_lines, validation_behavior_lines
+
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -573,8 +625,17 @@ def main():
     print(f"device: {device}")
     print(f"vocabulary words: {len(vocab)}")
     print(f"training samples: {len(train_data)}")
-    print(f"validation impressions: {len(dev_data)}")
+    print(
+        f"internal split: {split_metadata['train_behavior_rows']} train rows, "
+        f"{split_metadata['validation_behavior_rows']} validation rows",
+    )
+    print(
+        f"internal validation period: "
+        f"{split_metadata['validation_start']} to {split_metadata['validation_end']}",
+    )
+    print(f"validation impressions: {len(validation_data)}")
     print(f"validation sample cap: {EVAL_IMPRESSIONS if EVAL_IMPRESSIONS is not None else 'all'}")
+    print("MINDsmall_dev is reserved for final evaluation")
 
     step = 0
     total_batches = len(train_loader)
@@ -604,6 +665,7 @@ def main():
         "best_epoch": None,
         "best_metric_value": None,
         "best_model_path": MODEL_PATH,
+        "data_split": split_metadata,
     }
 
     for epoch in range(EPOCHS):
@@ -653,7 +715,7 @@ def main():
         )
 
         print("evaluating validation metrics...", flush=True)
-        validation_metrics = evaluate_validation_fast(model, dev_data, device)
+        validation_metrics = evaluate_validation_fast(model, validation_data, device)
         epoch_loss = float(np.mean(losses)) if losses else float("nan")
         metric_value = validation_metrics.get(BEST_MODEL_METRIC)
 
