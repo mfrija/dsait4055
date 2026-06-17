@@ -1,5 +1,7 @@
+import json
 import random
 import re
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -16,10 +18,16 @@ HISTORY_SIZE = 50
 NEGATIVES_PER_POSITIVE = 4
 MAX_VOCAB_SIZE = 30000
 BATCH_SIZE = 64
-EPOCHS = 1
+EPOCHS = 5
 MAX_STEPS = None
-EVAL_IMPRESSIONS = 1000
-MODEL_PATH = "nrms_simple.pt"
+EVAL_IMPRESSIONS = 5000
+MODEL_PATH = "nrms_simple_1.pt"
+CHECKPOINT_DIR = Path("checkpoints/nrms_1")
+TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history.json"
+LOG_INTERVAL_STEPS = 50
+CHECKPOINT_INTERVAL_STEPS = None
+VALIDATION_K_VALUES = (5, 10)
+BEST_MODEL_METRIC = "auc"
 
 EMBEDDING_DIM = 128
 ATTENTION_HEADS = 8
@@ -31,6 +39,16 @@ PAD_WORD = 0
 UNK_WORD = 1
 PAD_NEWS = "<PAD_NEWS>"
 
+# TO RUN FASTER
+ARTICLE_SIZE = 50
+HISTORY_SIZE = 30
+EMBEDDING_DIM = 64
+ATTENTION_HEADS = 4
+ATTENTION_HIDDEN_DIM = 128
+BATCH_SIZE = 128
+EPOCHS = 3
+MAX_STEPS = None
+EVAL_IMPRESSIONS = 1000
 
 def tokenize(text):
     return re.findall(r"[a-z0-9]+(?:'[a-z0-9]+)?", text.lower())
@@ -158,6 +176,71 @@ def keep_eval_items_unbatched(batch):
     return batch[0]
 
 
+def save_model_checkpoint(model, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), path)
+    print(f"saved checkpoint to {path}", flush=True)
+
+
+def write_training_history(history, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+
+
+def ranked_labels(labels, scores):
+    ranking = np.argsort(-scores, kind="mergesort")
+    return labels[ranking]
+
+
+def ndcg_at_k(labels, scores, k):
+    ranked = ranked_labels(labels, scores)
+    cutoff = min(k, len(ranked))
+    discounts = 1.0 / np.log2(np.arange(2, cutoff + 2))
+    dcg = float(np.sum(ranked[:cutoff] * discounts))
+    ideal_hits = min(int(np.sum(ranked)), cutoff)
+    if ideal_hits == 0:
+        return float("nan")
+    ideal_dcg = float(np.sum(discounts[:ideal_hits]))
+    return dcg / ideal_dcg
+
+
+def mrr(labels, scores):
+    ranked = ranked_labels(labels, scores)
+    positive_ranks = np.flatnonzero(ranked > 0)
+    if len(positive_ranks) == 0:
+        return float("nan")
+    return float(1.0 / (positive_ranks[0] + 1))
+
+
+def aggregate_metric_rows(rows):
+    if not rows:
+        return {}
+
+    aggregated = {"impression_count": len(rows)}
+    for metric_name in rows[0]:
+        values = np.asarray([row[metric_name] for row in rows], dtype=np.float64)
+        aggregated[metric_name] = (
+            float(np.nanmean(values)) if not np.all(np.isnan(values)) else float("nan")
+        )
+    return aggregated
+
+
+def metric_is_better(current, best):
+    if current is None or np.isnan(current):
+        return False
+    if best is None or np.isnan(best):
+        return True
+    return current > best
+
+
+def format_validation_metrics(metrics):
+    parts = []
+    for metric_name in ("auc", "mrr", "ndcg@5", "ndcg@10"):
+        if metric_name in metrics:
+            parts.append(f"{metric_name}={metrics[metric_name]:.4f}")
+    return ", ".join(parts)
+
+
 class AdditiveAttention(nn.Module):
     def __init__(self, input_dim):
         super().__init__()
@@ -166,9 +249,12 @@ class AdditiveAttention(nn.Module):
 
     def forward(self, vectors, mask):
         scores = self.query(torch.tanh(self.projection(vectors))).squeeze(-1)
+        valid_rows = mask.any(dim=1)
         scores = scores.masked_fill(~mask, -1e9)
+        scores = torch.where(valid_rows.unsqueeze(1), scores, torch.zeros_like(scores))
         weights = torch.softmax(scores, dim=-1)
-        return torch.bmm(weights.unsqueeze(1), vectors).squeeze(1)
+        pooled = torch.bmm(weights.unsqueeze(1), vectors).squeeze(1)
+        return pooled.masked_fill(~valid_rows.unsqueeze(1), 0.0)
 
 
 class NewsEncoder(nn.Module):
@@ -223,11 +309,15 @@ class NRMS(nn.Module):
         clicked_vectors = clicked_vectors.reshape(batch_size, history_size, EMBEDDING_DIM)
 
         history_mask = history.ne(PAD_WORD).any(dim=2)
+        valid_users = history_mask.any(dim=1)
+        padding_mask = ~history_mask
+        padding_mask = padding_mask.masked_fill(~valid_users.unsqueeze(1), False)
+
         contextual_clicks, _ = self.user_self_attention(
             clicked_vectors,
             clicked_vectors,
             clicked_vectors,
-            key_padding_mask=~history_mask,
+            key_padding_mask=padding_mask,
         )
 
         return self.user_attention_pooling(contextual_clicks, history_mask)
@@ -244,13 +334,13 @@ class NRMS(nn.Module):
 
 
 @torch.no_grad()
-def evaluate_auc(model, dataset, device):
+def evaluate_validation(model, dataset, device, k_values=VALIDATION_K_VALUES):
     model.eval()
-    auc_scores = []
+    metric_rows = []
     loader = DataLoader(dataset, batch_size=1, collate_fn=keep_eval_items_unbatched)
 
     for index, (history, candidates, labels) in enumerate(loader):
-        if index == EVAL_IMPRESSIONS:
+        if EVAL_IMPRESSIONS is not None and index == EVAL_IMPRESSIONS:
             break
 
         scores = model(
@@ -258,9 +348,17 @@ def evaluate_auc(model, dataset, device):
             candidates.unsqueeze(0).to(device),
         )
 
-        auc_scores.append(roc_auc_score(labels.numpy(), scores.squeeze(0).cpu().numpy()))
+        labels_array = labels.numpy()
+        scores_array = scores.squeeze(0).cpu().numpy()
+        row = {
+            "auc": float(roc_auc_score(labels_array, scores_array)),
+            "mrr": mrr(labels_array, scores_array),
+        }
+        for k in k_values:
+            row[f"ndcg@{k}"] = ndcg_at_k(labels_array, scores_array, k)
+        metric_rows.append(row)
 
-    return float(np.mean(auc_scores))
+    return aggregate_metric_rows(metric_rows)
 
 
 def main():
@@ -289,13 +387,40 @@ def main():
     print(f"vocabulary words: {len(vocab)}")
     print(f"training samples: {len(train_data)}")
     print(f"validation impressions: {len(dev_data)}")
+    print(f"validation sample cap: {EVAL_IMPRESSIONS if EVAL_IMPRESSIONS is not None else 'all'}")
 
     step = 0
+    total_batches = len(train_loader)
+    best_metric_value = None
+    training_history = {
+        "config": {
+            "article_size": ARTICLE_SIZE,
+            "history_size": HISTORY_SIZE,
+            "negative_per_positive": NEGATIVES_PER_POSITIVE,
+            "max_vocab_size": MAX_VOCAB_SIZE,
+            "batch_size": BATCH_SIZE,
+            "epochs": EPOCHS,
+            "max_steps": MAX_STEPS,
+            "eval_impressions": EVAL_IMPRESSIONS,
+            "embedding_dim": EMBEDDING_DIM,
+            "attention_heads": ATTENTION_HEADS,
+            "attention_hidden_dim": ATTENTION_HIDDEN_DIM,
+            "dropout": DROPOUT,
+            "learning_rate": LEARNING_RATE,
+            "best_model_metric": BEST_MODEL_METRIC,
+        },
+        "epochs": [],
+        "best_epoch": None,
+        "best_metric_value": None,
+        "best_model_path": MODEL_PATH,
+    }
+
     for epoch in range(EPOCHS):
         model.train()
         losses = []
+        epoch_started_at = time.time()
 
-        for history, candidates, labels in train_loader:
+        for batch_index, (history, candidates, labels) in enumerate(train_loader, start=1):
             history = history.to(device)
             candidates = candidates.to(device)
             labels = labels.to(device)
@@ -310,18 +435,82 @@ def main():
             losses.append(loss.item())
             step += 1
 
+            if step % LOG_INTERVAL_STEPS == 0 or batch_index == total_batches:
+                elapsed_minutes = (time.time() - epoch_started_at) / 60
+                average_loss = float(np.mean(losses[-LOG_INTERVAL_STEPS:]))
+                print(
+                    f"epoch {epoch + 1}/{EPOCHS} "
+                    f"batch {batch_index}/{total_batches} "
+                    f"step {step} "
+                    f"recent_loss={average_loss:.4f} "
+                    f"elapsed={elapsed_minutes:.1f}m",
+                    flush=True,
+                )
+
+            if CHECKPOINT_INTERVAL_STEPS and step % CHECKPOINT_INTERVAL_STEPS == 0:
+                save_model_checkpoint(
+                    model,
+                    CHECKPOINT_DIR / f"nrms_step_{step:06d}.pt",
+                )
+
             if MAX_STEPS and step >= MAX_STEPS:
                 break
 
-        auc = evaluate_auc(model, dev_data, device)
-        print(f"epoch {epoch + 1}: loss={np.mean(losses):.4f}, validation_auc={auc:.4f}")
+        save_model_checkpoint(
+            model,
+            CHECKPOINT_DIR / f"nrms_epoch_{epoch + 1:02d}.pt",
+        )
+
+        print("evaluating validation metrics...", flush=True)
+        validation_metrics = evaluate_validation(model, dev_data, device)
+        epoch_loss = float(np.mean(losses)) if losses else float("nan")
+        metric_value = validation_metrics.get(BEST_MODEL_METRIC)
+
+        epoch_record = {
+            "epoch": epoch + 1,
+            "step": step,
+            "loss": epoch_loss,
+            "validation": validation_metrics,
+            "elapsed_minutes": (time.time() - epoch_started_at) / 60,
+        }
+        training_history["epochs"].append(epoch_record)
+
+        print(
+            f"epoch {epoch + 1}: "
+            f"loss={epoch_loss:.4f}, "
+            f"{format_validation_metrics(validation_metrics)}",
+            flush=True,
+        )
+
+        if metric_is_better(metric_value, best_metric_value):
+            best_metric_value = metric_value
+            training_history["best_epoch"] = epoch + 1
+            training_history["best_metric_value"] = best_metric_value
+            if MODEL_PATH:
+                save_model_checkpoint(model, Path(MODEL_PATH))
+                save_model_checkpoint(model, CHECKPOINT_DIR / "nrms_best.pt")
+                print(
+                    f"new best model: epoch {epoch + 1}, "
+                    f"{BEST_MODEL_METRIC}={best_metric_value:.4f}",
+                    flush=True,
+                )
+
+        save_model_checkpoint(model, CHECKPOINT_DIR / "nrms_last.pt")
+        write_training_history(training_history, TRAINING_HISTORY_PATH)
 
         if MAX_STEPS and step >= MAX_STEPS:
             break
 
-    if MODEL_PATH:
-        torch.save(model.state_dict(), MODEL_PATH)
-        print(f"saved model to {MODEL_PATH}")
+    write_training_history(training_history, TRAINING_HISTORY_PATH)
+    if training_history["best_epoch"] is None:
+        print("warning: no best validation checkpoint was selected", flush=True)
+    else:
+        print(
+            f"best epoch: {training_history['best_epoch']} "
+            f"{BEST_MODEL_METRIC}={training_history['best_metric_value']:.4f}",
+            flush=True,
+        )
+        print(f"saved training history to {TRAINING_HISTORY_PATH}", flush=True)
 
 
 if __name__ == "__main__":
