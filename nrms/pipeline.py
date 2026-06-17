@@ -21,20 +21,23 @@ BATCH_SIZE = 64
 EPOCHS = 5
 MAX_STEPS = None
 EVAL_IMPRESSIONS = 5000
-MODEL_PATH = "nrms_simple_2.pt"
-CHECKPOINT_DIR = Path("checkpoints/nrms_2")
-TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history_2.json"
+MODEL_PATH = "nrms_simple_glove.pt"
+CHECKPOINT_DIR = Path("checkpoints/nrms_glove")
+TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history_glove.json"
 LOG_INTERVAL_STEPS = 50
 CHECKPOINT_INTERVAL_STEPS = None
 VALIDATION_K_VALUES = (5, 10)
 VALIDATION_NEWS_BATCH_SIZE = 512
 BEST_MODEL_METRIC = "auc"
 
-EMBEDDING_DIM = 128
-ATTENTION_HEADS = 8
+EMBEDDING_DIM = 100
+ATTENTION_HEADS = 4
 ATTENTION_HIDDEN_DIM = 200
 DROPOUT = 0.2
 LEARNING_RATE = 0.0001
+USE_GLOVE = True
+GLOVE_PATH = Path("data/GloVe/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt")
+GLOVE_INIT_STD = 0.1
 
 PAD_WORD = 0
 UNK_WORD = 1
@@ -43,7 +46,7 @@ PAD_NEWS = "<PAD_NEWS>"
 # TO RUN FASTER
 ARTICLE_SIZE = 50
 HISTORY_SIZE = 30
-EMBEDDING_DIM = 64
+EMBEDDING_DIM = 100
 ATTENTION_HEADS = 4
 ATTENTION_HIDDEN_DIM = 128
 BATCH_SIZE = 128
@@ -75,6 +78,59 @@ def build_vocab(news_texts):
         vocab[word] = len(vocab)
 
     return vocab
+
+
+def load_glove_embedding_matrix(vocab, glove_path, embedding_dim):
+    glove_path = Path(glove_path)
+    if not glove_path.exists():
+        raise FileNotFoundError(f"GloVe file not found: {glove_path}")
+
+    rng = np.random.default_rng(42)
+    embedding_matrix = rng.normal(
+        loc=0.0,
+        scale=GLOVE_INIT_STD,
+        size=(len(vocab), embedding_dim),
+    ).astype(np.float32)
+    embedding_matrix[PAD_WORD] = 0.0
+
+    matched_words = 0
+    wrong_dimension_matches = 0
+
+    with glove_path.open(encoding="utf-8") as file:
+        for line in file:
+            parts = line.rstrip().split()
+            if not parts:
+                continue
+
+            word = parts[0]
+            vocab_index = vocab.get(word)
+            if vocab_index is None:
+                continue
+
+            vector_values = parts[1:]
+            if len(vector_values) != embedding_dim:
+                wrong_dimension_matches += 1
+                continue
+
+            embedding_matrix[vocab_index] = np.asarray(vector_values, dtype=np.float32)
+            matched_words += 1
+
+    if matched_words == 0:
+        raise ValueError(
+            f"No vocabulary words from this run matched {glove_path}. "
+            "Check tokenizer/vocabulary compatibility and embedding dimension."
+        )
+
+    coverage_denominator = max(len(vocab) - 2, 1)
+    stats = {
+        "path": str(glove_path),
+        "embedding_dim": embedding_dim,
+        "matched_words": matched_words,
+        "vocab_size": len(vocab),
+        "coverage": matched_words / coverage_denominator,
+        "wrong_dimension_matches": wrong_dimension_matches,
+    }
+    return torch.tensor(embedding_matrix, dtype=torch.float32), stats
 
 
 def encode_article(tokens, vocab):
@@ -259,9 +315,23 @@ class AdditiveAttention(nn.Module):
 
 
 class NewsEncoder(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, pretrained_embeddings=None):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, EMBEDDING_DIM, padding_idx=PAD_WORD)
+        if pretrained_embeddings is not None:
+            expected_shape = (vocab_size, EMBEDDING_DIM)
+            if tuple(pretrained_embeddings.shape) != expected_shape:
+                raise ValueError(
+                    f"Expected pretrained embeddings with shape {expected_shape}, "
+                    f"got {tuple(pretrained_embeddings.shape)}"
+                )
+            self.embedding = nn.Embedding.from_pretrained(
+                pretrained_embeddings,
+                freeze=False,
+                padding_idx=PAD_WORD,
+            )
+        else:
+            self.embedding = nn.Embedding(vocab_size, EMBEDDING_DIM, padding_idx=PAD_WORD)
+
         self.self_attention = nn.MultiheadAttention(
             EMBEDDING_DIM,
             ATTENTION_HEADS,
@@ -291,9 +361,9 @@ class NewsEncoder(nn.Module):
 
 
 class NRMS(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, pretrained_embeddings=None):
         super().__init__()
-        self.news_encoder = NewsEncoder(vocab_size)
+        self.news_encoder = NewsEncoder(vocab_size, pretrained_embeddings=pretrained_embeddings)
         self.user_self_attention = nn.MultiheadAttention(
             EMBEDDING_DIM,
             ATTENTION_HEADS,
@@ -475,13 +545,28 @@ def main():
     dev_texts = read_news_texts(dev_dir / "news.tsv")
     vocab = build_vocab(train_texts)
     news = encode_all_news({**train_texts, **dev_texts}, vocab)
+    pretrained_embeddings = None
+    glove_stats = None
+
+    if USE_GLOVE:
+        print(f"loading GloVe embeddings from {GLOVE_PATH}...", flush=True)
+        pretrained_embeddings, glove_stats = load_glove_embedding_matrix(
+            vocab=vocab,
+            glove_path=GLOVE_PATH,
+            embedding_dim=EMBEDDING_DIM,
+        )
+        print(
+            f"GloVe coverage: {glove_stats['matched_words']}/{glove_stats['vocab_size']} "
+            f"vocab entries ({glove_stats['coverage']:.2%})",
+            flush=True,
+        )
 
     train_data = MindTrainDataset(train_dir / "behaviors.tsv", news)
     dev_data = MindEvalDataset(dev_dir / "behaviors.tsv", news)
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = NRMS(len(vocab)).to(device)
+    model = NRMS(len(vocab), pretrained_embeddings=pretrained_embeddings).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     loss_function = nn.CrossEntropyLoss()
 
@@ -512,6 +597,8 @@ def main():
             "best_model_metric": BEST_MODEL_METRIC,
             "validation_mode": "fast_precomputed_news",
             "validation_news_batch_size": VALIDATION_NEWS_BATCH_SIZE,
+            "use_glove": USE_GLOVE,
+            "glove": glove_stats,
         },
         "epochs": [],
         "best_epoch": None,
