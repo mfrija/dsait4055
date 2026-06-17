@@ -13,6 +13,7 @@ import torch
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
+from nrms import data as nrms_data
 from nrms import pipeline
 from nrms.user_clustering import build_news_lookup, encode_history, load_model
 from src.evaluation.evaluator import iter_mind_impressions
@@ -76,7 +77,10 @@ def aggregate_metric_rows(rows, k_values):
 
 
 def encode_candidates(candidates, encoded_news, device):
-    encoded = [encoded_news.get(news_id, encoded_news[pipeline.PAD_NEWS]) for news_id in candidates]
+    encoded = [
+        encoded_news.get(news_id, encoded_news[nrms_data.PAD_NEWS])
+        for news_id in candidates
+    ]
     return torch.tensor(encoded, dtype=torch.long, device=device)
 
 

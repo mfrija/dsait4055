@@ -13,6 +13,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 
+from nrms import data as nrms_data
 from nrms import pipeline
 
 
@@ -54,10 +55,17 @@ def build_news_lookup(data_dir):
     train_dir = data_dir / "MINDsmall_train" / "MINDsmall_train"
     dev_dir = data_dir / "MINDsmall_dev" / "MINDsmall_dev"
 
-    train_texts = pipeline.read_news_texts(train_dir / "news.tsv")
-    dev_texts = pipeline.read_news_texts(dev_dir / "news.tsv")
-    vocab = pipeline.build_vocab(train_texts)
-    encoded_news = pipeline.encode_all_news({**train_texts, **dev_texts}, vocab)
+    train_texts = nrms_data.read_news_texts(train_dir / "news.tsv")
+    dev_texts = nrms_data.read_news_texts(dev_dir / "news.tsv")
+    vocab = nrms_data.build_vocab(
+        train_texts,
+        max_vocab_size=pipeline.MAX_VOCAB_SIZE,
+    )
+    encoded_news = nrms_data.encode_all_news(
+        {**train_texts, **dev_texts},
+        vocab,
+        article_size=pipeline.ARTICLE_SIZE,
+    )
 
     metadata = read_news_metadata(train_dir / "news.tsv")
     metadata.update(read_news_metadata(dev_dir / "news.tsv"))
@@ -67,8 +75,11 @@ def build_news_lookup(data_dir):
 
 def encode_history(history, encoded_news):
     history = history[-pipeline.HISTORY_SIZE :]
-    history = [pipeline.PAD_NEWS] * (pipeline.HISTORY_SIZE - len(history)) + history
-    return [encoded_news.get(news_id, encoded_news[pipeline.PAD_NEWS]) for news_id in history]
+    history = [nrms_data.PAD_NEWS] * (pipeline.HISTORY_SIZE - len(history)) + history
+    return [
+        encoded_news.get(news_id, encoded_news[nrms_data.PAD_NEWS])
+        for news_id in history
+    ]
 
 
 def load_model(vocab_size, checkpoint_path, device):
@@ -125,7 +136,7 @@ def summarize_clusters(user_ids, labels, user_histories, metadata, top_n):
                     continue
                 category_counts[news["category"]] += 1
                 subcategory_counts[news["subcategory"]] += 1
-                title_word_counts.update(pipeline.tokenize(news["title"]))
+                title_word_counts.update(nrms_data.tokenize(news["title"]))
 
         summaries.append(
             {
