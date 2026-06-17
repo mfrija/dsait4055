@@ -21,12 +21,13 @@ BATCH_SIZE = 64
 EPOCHS = 5
 MAX_STEPS = None
 EVAL_IMPRESSIONS = 5000
-MODEL_PATH = "nrms_simple_1.pt"
-CHECKPOINT_DIR = Path("checkpoints/nrms_1")
-TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history.json"
+MODEL_PATH = "nrms_simple_2.pt"
+CHECKPOINT_DIR = Path("checkpoints/nrms_2")
+TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history_2.json"
 LOG_INTERVAL_STEPS = 50
 CHECKPOINT_INTERVAL_STEPS = None
 VALIDATION_K_VALUES = (5, 10)
+VALIDATION_NEWS_BATCH_SIZE = 512
 BEST_MODEL_METRIC = "auc"
 
 EMBEDDING_DIM = 128
@@ -309,6 +310,9 @@ class NRMS(nn.Module):
         clicked_vectors = clicked_vectors.reshape(batch_size, history_size, EMBEDDING_DIM)
 
         history_mask = history.ne(PAD_WORD).any(dim=2)
+        return self.encode_user_vectors(clicked_vectors, history_mask)
+
+    def encode_user_vectors(self, clicked_vectors, history_mask):
         valid_users = history_mask.any(dim=1)
         padding_mask = ~history_mask
         padding_mask = padding_mask.masked_fill(~valid_users.unsqueeze(1), False)
@@ -350,6 +354,104 @@ def evaluate_validation(model, dataset, device, k_values=VALIDATION_K_VALUES):
 
         labels_array = labels.numpy()
         scores_array = scores.squeeze(0).cpu().numpy()
+        row = {
+            "auc": float(roc_auc_score(labels_array, scores_array)),
+            "mrr": mrr(labels_array, scores_array),
+        }
+        for k in k_values:
+            row[f"ndcg@{k}"] = ndcg_at_k(labels_array, scores_array, k)
+        metric_rows.append(row)
+
+    return aggregate_metric_rows(metric_rows)
+
+
+def limited_eval_impressions(dataset):
+    if EVAL_IMPRESSIONS is None:
+        return dataset.impressions
+    return dataset.impressions[:EVAL_IMPRESSIONS]
+
+
+def collect_eval_news_ids(impressions):
+    news_ids = {PAD_NEWS}
+    for history, candidates, _ in impressions:
+        news_ids.update(history[-HISTORY_SIZE:])
+        news_ids.update(candidates)
+    return news_ids
+
+
+@torch.no_grad()
+def precompute_news_vectors(model, news, news_ids, device, batch_size=VALIDATION_NEWS_BATCH_SIZE):
+    model.eval()
+
+    ordered_news_ids = [PAD_NEWS]
+    ordered_news_ids.extend(
+        news_id
+        for news_id in news
+        if news_id != PAD_NEWS and news_id in news_ids
+    )
+    id_to_index = {news_id: index for index, news_id in enumerate(ordered_news_ids)}
+
+    vectors = []
+    valid_news = []
+    for start in range(0, len(ordered_news_ids), batch_size):
+        batch_ids = ordered_news_ids[start : start + batch_size]
+        batch_articles = [news.get(news_id, news[PAD_NEWS]) for news_id in batch_ids]
+        articles = torch.tensor(batch_articles, dtype=torch.long, device=device)
+        vectors.append(model.news_encoder(articles))
+        valid_news.extend(any(word_id != PAD_WORD for word_id in article) for article in batch_articles)
+
+    return (
+        id_to_index,
+        torch.cat(vectors, dim=0),
+        torch.tensor(valid_news, dtype=torch.bool, device=device),
+    )
+
+
+def news_indexes(news_ids, id_to_index, pad_index, device):
+    return torch.tensor(
+        [id_to_index.get(news_id, pad_index) for news_id in news_ids],
+        dtype=torch.long,
+        device=device,
+    )
+
+
+def padded_history_ids(history):
+    history = history[-HISTORY_SIZE:]
+    return [PAD_NEWS] * (HISTORY_SIZE - len(history)) + history
+
+
+@torch.no_grad()
+def evaluate_validation_fast(model, dataset, device, k_values=VALIDATION_K_VALUES):
+    model.eval()
+    impressions = limited_eval_impressions(dataset)
+    news_ids = collect_eval_news_ids(impressions)
+    id_to_index, news_vectors, valid_news = precompute_news_vectors(
+        model=model,
+        news=dataset.news,
+        news_ids=news_ids,
+        device=device,
+    )
+    pad_index = id_to_index[PAD_NEWS]
+
+    metric_rows = []
+    for history, candidates, labels in impressions:
+        history_indices = news_indexes(
+            padded_history_ids(history),
+            id_to_index,
+            pad_index,
+            device,
+        )
+        candidate_indices = news_indexes(candidates, id_to_index, pad_index, device)
+
+        clicked_vectors = news_vectors[history_indices].unsqueeze(0)
+        history_mask = valid_news[history_indices].unsqueeze(0)
+        candidate_vectors = news_vectors[candidate_indices]
+
+        user_vector = model.encode_user_vectors(clicked_vectors, history_mask)
+        scores = torch.matmul(candidate_vectors, user_vector.squeeze(0))
+
+        labels_array = np.asarray(labels, dtype=np.int64)
+        scores_array = scores.cpu().numpy()
         row = {
             "auc": float(roc_auc_score(labels_array, scores_array)),
             "mrr": mrr(labels_array, scores_array),
@@ -408,6 +510,8 @@ def main():
             "dropout": DROPOUT,
             "learning_rate": LEARNING_RATE,
             "best_model_metric": BEST_MODEL_METRIC,
+            "validation_mode": "fast_precomputed_news",
+            "validation_news_batch_size": VALIDATION_NEWS_BATCH_SIZE,
         },
         "epochs": [],
         "best_epoch": None,
@@ -462,7 +566,7 @@ def main():
         )
 
         print("evaluating validation metrics...", flush=True)
-        validation_metrics = evaluate_validation(model, dev_data, device)
+        validation_metrics = evaluate_validation_fast(model, dev_data, device)
         epoch_loss = float(np.mean(losses)) if losses else float("nan")
         metric_value = validation_metrics.get(BEST_MODEL_METRIC)
 
