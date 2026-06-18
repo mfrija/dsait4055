@@ -1,0 +1,187 @@
+{
+  "total_users": 49108,
+  "cluster_count": 10,
+  "cluster_sizes": {
+    "0": 4907,
+    "1": 4242,
+    "2": 5357,
+    "3": 4808,
+    "4": 5271,
+    "5": 5271,
+    "6": 5325,
+    "7": 4450,
+    "8": 5424,
+    "9": 4053
+  },
+  "largest_cluster_share": 0.11045043577421194,
+  "smallest_cluster_share": 0.0825323776166816,
+  "largest_to_smallest_ratio": 1.3382679496669134,
+  "silhouette_2d_pca_sampled": 0.09276565323374084,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 4907,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5166617484726275,
+      "top_categories": [
+        "news",
+        "sports",
+        "finance"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newscrime",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 4242,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.4398271080427214,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "newspolitics",
+        "newsus",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 5357,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5907668151833688,
+      "top_categories": [
+        "news",
+        "sports",
+        "finance"
+      ],
+      "top_subcategories": [
+        "newspolitics",
+        "newsus",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 3,
+      "user_count": 4808,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.30009830745360005,
+      "top_categories": [
+        "news",
+        "finance",
+        "sports"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "football_nfl",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 4,
+      "user_count": 5271,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.4291515281042958,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "newscrime",
+        "newsus",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 5,
+      "user_count": 5271,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.23531396017091027,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "foodanddrink"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "lifestylebuzz",
+        "foodnews"
+      ]
+    },
+    {
+      "cluster": 6,
+      "user_count": 5325,
+      "dominant_category": "sports",
+      "dominant_category_share_among_listed": 0.33116514893758964,
+      "top_categories": [
+        "sports",
+        "news",
+        "tv"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "newsus",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 7,
+      "user_count": 4450,
+      "dominant_category": "lifestyle",
+      "dominant_category_share_among_listed": 0.22948596427269413,
+      "top_categories": [
+        "lifestyle",
+        "news",
+        "tv"
+      ],
+      "top_subcategories": [
+        "lifestylebuzz",
+        "tv-celebrity",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 8,
+      "user_count": 5424,
+      "dominant_category": "sports",
+      "dominant_category_share_among_listed": 0.5156528713890651,
+      "top_categories": [
+        "sports",
+        "news",
+        "finance"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "football_ncaa",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 9,
+      "user_count": 4053,
+      "dominant_category": "lifestyle",
+      "dominant_category_share_among_listed": 0.2689480354879594,
+      "top_categories": [
+        "lifestyle",
+        "tv",
+        "news"
+      ],
+      "top_subcategories": [
+        "lifestyleroyals",
+        "tv-celebrity",
+        "newsus"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.8028210401535034,
+    "max_off_diagonal": 0.9275621175765991,
+    "min_off_diagonal": 0.464608371257782
+  }
+}

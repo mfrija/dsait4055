@@ -1,0 +1,102 @@
+{
+  "total_users": 49108,
+  "cluster_count": 5,
+  "cluster_sizes": {
+    "0": 9783,
+    "1": 10163,
+    "2": 8671,
+    "3": 10132,
+    "4": 10359
+  },
+  "largest_cluster_share": 0.21094322717276207,
+  "smallest_cluster_share": 0.17657000895984362,
+  "largest_to_smallest_ratio": 1.1946718948218198,
+  "silhouette_2d_pca_sampled": 0.14893741731496035,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 9783,
+      "dominant_category": "sports",
+      "dominant_category_share_among_listed": 0.4387343385007433,
+      "top_categories": [
+        "sports",
+        "news",
+        "finance"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "newsus",
+        "football_ncaa"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 10163,
+      "dominant_category": "lifestyle",
+      "dominant_category_share_among_listed": 0.2381252498966529,
+      "top_categories": [
+        "lifestyle",
+        "news",
+        "tv"
+      ],
+      "top_subcategories": [
+        "tv-celebrity",
+        "lifestyleroyals",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 8671,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5593654707065464,
+      "top_categories": [
+        "news",
+        "sports",
+        "finance"
+      ],
+      "top_subcategories": [
+        "newspolitics",
+        "newsus",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 3,
+      "user_count": 10132,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.4517330891981783,
+      "top_categories": [
+        "news",
+        "sports",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newscrime",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 4,
+      "user_count": 10359,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.27873192463118945,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "finance"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "lifestylebuzz",
+        "newsworld"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.8069451451301575,
+    "max_off_diagonal": 0.9006869196891785,
+    "min_off_diagonal": 0.6410059332847595
+  }
+}

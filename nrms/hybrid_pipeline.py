@@ -1,4 +1,3 @@
-import argparse
 import csv
 import json
 import math
@@ -14,11 +13,52 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
 from nrms import data as nrms_data
-from nrms import pipeline
-from nrms.user_clustering import build_news_lookup, encode_history, load_model
+from nrms.user_clustering import (
+    apply_training_config,
+    build_news_lookup,
+    encode_history,
+    load_model,
+    read_training_config,
+)
 from src.evaluation.evaluator import iter_mind_impressions
 from src.evaluation.metrics import evaluate_ranking
 
+
+MODEL_NAME = "3_100d"
+MODEL_CONFIGS = {
+    "3_100d": {
+        "checkpoint_path": Path("nrms_100d.pt"),
+        "training_history_path": Path("checkpoints/nrms_100d/training_history.json"),
+        "cluster_dir": Path("reports/3_user_clustering_100d"),
+    },
+    "5_100d": {
+        "checkpoint_path": Path("nrms_100d.pt"),
+        "training_history_path": Path("checkpoints/nrms_100d/training_history.json"),
+        "cluster_dir": Path("reports/5_user_clustering_100d"),
+    },
+    "8_100d": {
+        "checkpoint_path": Path("nrms_100d.pt"),
+        "training_history_path": Path("checkpoints/nrms_100d/training_history.json"),
+        "cluster_dir": Path("reports/8_user_clustering_100d"),
+    },
+    "10_100d": {
+        "checkpoint_path": Path("nrms_100d.pt"),
+        "training_history_path": Path("checkpoints/nrms_100d/training_history.json"),
+        "cluster_dir": Path("reports/10_user_clustering_100d"),
+    },
+    "300d": {
+        "checkpoint_path": Path("nrms_300d.pt"),
+        "training_history_path": Path("checkpoints/nrms_300d/training_history.json"),
+        "cluster_dir": Path("reports/user_clustering_300d"),
+    },
+}
+
+DATA_DIR = Path("data/mind-small")
+BEHAVIORS_PATH = DATA_DIR / "MINDsmall_dev" / "MINDsmall_dev" / "behaviors.tsv"
+OUTPUT_DIR = Path("reports") / f"hybrid_evaluation_{MODEL_NAME}"
+MAX_IMPRESSIONS = None
+K_VALUES = (5, 10)
+DEVICE = torch.device("cpu")
 
 HISTORY_GROUPS = (
     ("1-3", 1, 3),
@@ -85,9 +125,18 @@ def encode_candidates(candidates, encoded_news, device):
 
 
 @torch.no_grad()
-def score_impression(model, impression, encoded_news, centroids, normalized_centroids, user_clusters, device):
+def score_impression(
+    model,
+    impression,
+    encoded_news,
+    centroids,
+    normalized_centroids,
+    user_clusters,
+    history_size,
+    device,
+):
     history = torch.tensor(
-        encode_history(impression.history, encoded_news),
+        encode_history(impression.history, encoded_news, history_size),
         dtype=torch.long,
         device=device,
     ).unsqueeze(0)
@@ -127,6 +176,7 @@ def evaluate_hybrid(
     centroids,
     normalized_centroids,
     user_clusters,
+    history_size,
     device,
     max_impressions=None,
     k_values=(5, 10),
@@ -156,6 +206,7 @@ def evaluate_hybrid(
             centroids=centroids,
             normalized_centroids=normalized_centroids,
             user_clusters=user_clusters,
+            history_size=history_size,
             device=device,
         )
 
@@ -193,63 +244,100 @@ def print_report(report):
             )
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Compare individual NRMS, cluster-only, and hybrid scoring by history length."
-    )
-    parser.add_argument("--data-dir", default="data/mind-small")
-    parser.add_argument("--checkpoint-path", default=pipeline.MODEL_PATH)
-    parser.add_argument("--cluster-dir", default="reports/user_clustering")
-    parser.add_argument("--output-dir", default="reports/hybrid_evaluation")
-    parser.add_argument("--behaviors-path", default="data/mind-small/MINDsmall_dev/MINDsmall_dev/behaviors.tsv")
-    parser.add_argument("--max-impressions", type=int, default=None)
-    args = parser.parse_args()
-
-    data_dir = Path(args.data_dir)
-    cluster_dir = Path(args.cluster_dir)
-    output_dir = Path(args.output_dir)
+def run_hybrid_evaluation(
+    checkpoint_path,
+    training_history_path,
+    cluster_dir,
+    output_dir,
+    data_dir=DATA_DIR,
+    behaviors_path=BEHAVIORS_PATH,
+    max_impressions=MAX_IMPRESSIONS,
+    k_values=K_VALUES,
+    device=DEVICE,
+):
+    checkpoint_path = Path(checkpoint_path)
+    training_history_path = Path(training_history_path)
+    cluster_dir = Path(cluster_dir)
+    output_dir = Path(output_dir)
+    data_dir = Path(data_dir)
+    behaviors_path = Path(behaviors_path)
 
     centroids_path = cluster_dir / "cluster_centroids.npy"
     user_clusters_path = cluster_dir / "user_clusters.csv"
 
     if not centroids_path.exists() or not user_clusters_path.exists():
-        raise SystemExit(
-            "Missing cluster files. Run `python nrms/user_clustering.py --clusters 10` first."
+        raise FileNotFoundError(
+            f"Missing cluster files in {cluster_dir}. Run nrms/user_clustering.py first."
         )
 
-    print("loading news and vocabulary...")
-    vocab, encoded_news, _ = build_news_lookup(data_dir)
+    config = read_training_config(training_history_path)
+    apply_training_config(config)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"checkpoint: {checkpoint_path}")
+    print(f"training history: {training_history_path}")
+    print(f"cluster directory: {cluster_dir}")
+    print(
+        "model config: "
+        f"embedding_dim={config['embedding_dim']} "
+        f"attention_heads={config['attention_heads']} "
+        f"article_size={config['article_size']} "
+        f"history_size={config['history_size']}"
+    )
+    print("loading news and vocabulary...")
+    vocab, encoded_news, _ = build_news_lookup(data_dir, config)
+
     print(f"device: {device}")
 
     print("loading NRMS checkpoint...")
-    try:
-        model = load_model(len(vocab), args.checkpoint_path, device)
-    except RuntimeError as error:
-        print(f"error: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+    model = load_model(len(vocab), checkpoint_path, device, config=config)
 
     print("loading clusters...")
     user_clusters = load_user_clusters(user_clusters_path)
     centroids = np.load(centroids_path)
+    expected_centroid_dim = int(config["embedding_dim"])
+    if centroids.ndim != 2 or centroids.shape[1] != expected_centroid_dim:
+        raise ValueError(
+            "Cluster centroids do not match the selected NRMS model. "
+            f"centroid shape={centroids.shape}, expected second dimension={expected_centroid_dim}"
+        )
+    if user_clusters and max(user_clusters.values()) >= len(centroids):
+        raise ValueError("user_clusters.csv contains a cluster not present in cluster_centroids.npy")
+
     normalized_centroids = normalize(centroids)
 
     print("evaluating hybrid models...")
     report = evaluate_hybrid(
         model=model,
-        behaviors_path=args.behaviors_path,
+        behaviors_path=behaviors_path,
         encoded_news=encoded_news,
         centroids=centroids,
         normalized_centroids=normalized_centroids,
         user_clusters=user_clusters,
+        history_size=int(config["history_size"]),
         device=device,
-        max_impressions=args.max_impressions,
+        max_impressions=max_impressions,
+        k_values=k_values,
     )
 
     report_path = write_report(report, output_dir)
     print_report(report)
     print(f"\nsaved {report_path}")
+    return report
+
+
+def main():
+    if MODEL_NAME not in MODEL_CONFIGS:
+        raise ValueError(
+            f"Unknown MODEL_NAME {MODEL_NAME!r}; choose one of {sorted(MODEL_CONFIGS)}"
+        )
+
+    model_config = MODEL_CONFIGS[MODEL_NAME]
+    run_hybrid_evaluation(
+        checkpoint_path=model_config["checkpoint_path"],
+        training_history_path=model_config["training_history_path"],
+        cluster_dir=model_config["cluster_dir"],
+        output_dir=OUTPUT_DIR,
+    )
 
 
 if __name__ == "__main__":
