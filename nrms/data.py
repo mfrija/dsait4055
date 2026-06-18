@@ -195,16 +195,21 @@ class MindTrainDataset(Dataset):
 
     def __getitem__(self, index):
         history, clicked_news, ignored_news = self.samples[index]
-        negatives = random.choices(
-            ignored_news,
-            k=self.negatives_per_positive,
-        )
+        if len(ignored_news) >= self.negatives_per_positive:
+            negatives = random.sample(ignored_news, k=self.negatives_per_positive)
+        else:
+            negatives = random.choices(ignored_news, k=self.negatives_per_positive)
+
         candidates = [clicked_news] + negatives
+        candidate_order = list(range(len(candidates)))
+        random.shuffle(candidate_order)
+        candidates = [candidates[candidate_index] for candidate_index in candidate_order]
+        positive_index = candidate_order.index(0)
 
         return (
             torch.tensor(self.history_tensor(history)),
             torch.tensor([self.news_tensor(news_id) for news_id in candidates]),
-            torch.tensor(0),
+            torch.tensor(positive_index),
         )
 
 
