@@ -1,0 +1,68 @@
+{
+  "total_users": 49108,
+  "cluster_count": 3,
+  "cluster_sizes": {
+    "0": 17991,
+    "1": 15903,
+    "2": 15214
+  },
+  "largest_cluster_share": 0.36635578724444084,
+  "smallest_cluster_share": 0.3098069560967663,
+  "largest_to_smallest_ratio": 1.182529249375575,
+  "silhouette_2d_pca_sampled": 0.34866063784505996,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 17991,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.3965473396875674,
+      "top_categories": [
+        "news",
+        "sports",
+        "finance"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "newspolitics",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 15903,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.3544119403905368,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "finance"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newscrime",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 15214,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.2825862360726405,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "tv-celebrity",
+        "newsus",
+        "newscrime"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.824454128742218,
+    "max_off_diagonal": 0.8769909739494324,
+    "min_off_diagonal": 0.737769365310669
+  }
+}

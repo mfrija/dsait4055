@@ -1,0 +1,44 @@
+{
+  "checkpoint": "nrms_100d.pt",
+  "training_history": "checkpoints/nrms_100d/training_history.json",
+  "data_dir": "data/mind-small",
+  "behaviors": "data/mind-small/MINDsmall_dev/MINDsmall_dev/behaviors.tsv",
+  "train_behaviors": "data/mind-small/MINDsmall_train/MINDsmall_train/behaviors.tsv",
+  "output_dir": "reports/evaluation-nrms-100d",
+  "k_values": [
+    5,
+    10
+  ],
+  "max_impressions": null,
+  "empty_history_strategy": "model",
+  "precompute_news_vectors": true,
+  "news_vector_batch_size": 512,
+  "model_config": {
+    "article_size": 80,
+    "history_size": 50,
+    "negative_per_positive": 4,
+    "max_vocab_size": 30000,
+    "batch_size": 64,
+    "epochs": 5,
+    "max_steps": null,
+    "eval_impressions": null,
+    "embedding_dim": 100,
+    "attention_heads": 4,
+    "attention_head_dim": 25,
+    "attention_hidden_dim": 200,
+    "dropout": 0.2,
+    "learning_rate": 0.0001,
+    "best_model_metric": "auc",
+    "validation_mode": "fast_precomputed_news",
+    "validation_news_batch_size": 512,
+    "use_glove": true,
+    "glove": {
+      "path": "data/GloVe/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt",
+      "embedding_dim": 100,
+      "matched_words": 28336,
+      "vocab_size": 30000,
+      "coverage": 0.944596306420428,
+      "wrong_dimension_matches": 2348
+    }
+  }
+}
