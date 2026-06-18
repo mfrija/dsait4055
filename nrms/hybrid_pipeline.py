@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
@@ -20,11 +21,11 @@ from nrms.user_clustering import (
     load_model,
     read_training_config,
 )
-from src.evaluation.evaluator import iter_mind_impressions
+from src.evaluation.evaluator import iter_mind_impressions, read_user_ids
 from src.evaluation.metrics import evaluate_ranking
 
 
-MODEL_NAME = "3_100d"
+MODEL_NAME = "10_100d"
 MODEL_CONFIGS = {
     "3_100d": {
         "checkpoint_path": Path("nrms_100d.pt"),
@@ -55,9 +56,14 @@ MODEL_CONFIGS = {
 
 DATA_DIR = Path("data/mind-small")
 BEHAVIORS_PATH = DATA_DIR / "MINDsmall_dev" / "MINDsmall_dev" / "behaviors.tsv"
+TRAIN_BEHAVIORS_PATH = (
+    DATA_DIR / "MINDsmall_train" / "MINDsmall_train" / "behaviors.tsv"
+)
 OUTPUT_DIR = Path("reports") / f"hybrid_evaluation_{MODEL_NAME}"
 MAX_IMPRESSIONS = None
 K_VALUES = (5, 10)
+INCLUDE_OVERALL = True
+INCLUDE_USER_SEGMENTS = True
 DEVICE = torch.device("cpu")
 
 HISTORY_GROUPS = (
@@ -180,6 +186,8 @@ def evaluate_hybrid(
     device,
     max_impressions=None,
     k_values=(5, 10),
+    include_overall=True,
+    train_user_ids=None,
 ):
     rows = {
         group_name: {
@@ -189,7 +197,25 @@ def evaluate_hybrid(
         }
         for group_name, _, _ in HISTORY_GROUPS
     }
+    if include_overall:
+        rows["overall"] = {
+            "individual": [],
+            "cluster_only": [],
+            "hybrid": [],
+        }
+    if train_user_ids is not None:
+        rows["overlap_users"] = {
+            "individual": [],
+            "cluster_only": [],
+            "hybrid": [],
+        }
+        rows["unseen_users"] = {
+            "individual": [],
+            "cluster_only": [],
+            "hybrid": [],
+        }
     counts = defaultdict(int)
+    group_users = defaultdict(set)
 
     for index, impression in enumerate(iter_mind_impressions(behaviors_path)):
         if max_impressions is not None and index >= max_impressions:
@@ -210,13 +236,31 @@ def evaluate_hybrid(
             device=device,
         )
 
-        counts[group] += 1
+        target_groups = [group]
+        if include_overall:
+            target_groups.append("overall")
+        if train_user_ids is not None:
+            target_groups.append(
+                "overlap_users"
+                if impression.user_id in train_user_ids
+                else "unseen_users"
+            )
+
+        for target_group in target_groups:
+            counts[target_group] += 1
+            group_users[target_group].add(impression.user_id)
+
         for model_name, scores in scores_by_model.items():
-            rows[group][model_name].append(evaluate_ranking(impression.labels, scores, k_values=k_values))
+            metrics = evaluate_ranking(impression.labels, scores, k_values=k_values)
+            for target_group in target_groups:
+                rows[target_group][model_name].append(metrics)
 
     report = {}
     for group_name in rows:
-        report[group_name] = {"impression_count": counts[group_name]}
+        report[group_name] = {
+            "impression_count": counts[group_name],
+            "user_count": len(group_users[group_name]),
+        }
         for model_name, metric_rows in rows[group_name].items():
             report[group_name][model_name] = aggregate_metric_rows(metric_rows, k_values)
 
@@ -230,9 +274,41 @@ def write_report(report, output_dir):
     return report_path
 
 
+def write_spreadsheet(report, output_dir):
+    rows = []
+    for group_name, group_report in report.items():
+        for model_name in ("individual", "cluster_only", "hybrid"):
+            rows.append(
+                {
+                    "evaluation_group": group_name,
+                    "model": model_name,
+                    "impression_count": group_report["impression_count"],
+                    "user_count": group_report["user_count"],
+                    **group_report[model_name],
+                }
+            )
+
+    spreadsheet_path = output_dir / "hybrid_evaluation.xlsx"
+    results = pd.DataFrame(rows)
+    with pd.ExcelWriter(spreadsheet_path, engine="openpyxl") as writer:
+        results.to_excel(writer, sheet_name="results", index=False)
+        worksheet = writer.sheets["results"]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+        for column in worksheet.columns:
+            width = max(len(str(cell.value or "")) for cell in column) + 2
+            worksheet.column_dimensions[column[0].column_letter].width = min(width, 22)
+
+    return spreadsheet_path
+
+
 def print_report(report):
     for group_name, group_report in report.items():
-        print(f"\n{group_name} clicks ({group_report['impression_count']} impressions)")
+        print(
+            f"\n{group_name} "
+            f"({group_report['impression_count']} impressions, "
+            f"{group_report['user_count']} users)"
+        )
         for model_name in ("individual", "cluster_only", "hybrid"):
             metrics = group_report[model_name]
             print(
@@ -251,8 +327,11 @@ def run_hybrid_evaluation(
     output_dir,
     data_dir=DATA_DIR,
     behaviors_path=BEHAVIORS_PATH,
+    train_behaviors_path=TRAIN_BEHAVIORS_PATH,
     max_impressions=MAX_IMPRESSIONS,
     k_values=K_VALUES,
+    include_overall=INCLUDE_OVERALL,
+    include_user_segments=INCLUDE_USER_SEGMENTS,
     device=DEVICE,
 ):
     checkpoint_path = Path(checkpoint_path)
@@ -261,6 +340,7 @@ def run_hybrid_evaluation(
     output_dir = Path(output_dir)
     data_dir = Path(data_dir)
     behaviors_path = Path(behaviors_path)
+    train_behaviors_path = Path(train_behaviors_path)
 
     centroids_path = cluster_dir / "cluster_centroids.npy"
     user_clusters_path = cluster_dir / "user_clusters.csv"
@@ -304,6 +384,9 @@ def run_hybrid_evaluation(
         raise ValueError("user_clusters.csv contains a cluster not present in cluster_centroids.npy")
 
     normalized_centroids = normalize(centroids)
+    train_user_ids = (
+        read_user_ids(train_behaviors_path) if include_user_segments else None
+    )
 
     print("evaluating hybrid models...")
     report = evaluate_hybrid(
@@ -317,11 +400,15 @@ def run_hybrid_evaluation(
         device=device,
         max_impressions=max_impressions,
         k_values=k_values,
+        include_overall=include_overall,
+        train_user_ids=train_user_ids,
     )
 
     report_path = write_report(report, output_dir)
+    spreadsheet_path = write_spreadsheet(report, output_dir)
     print_report(report)
     print(f"\nsaved {report_path}")
+    print(f"saved {spreadsheet_path}")
     return report
 
 
