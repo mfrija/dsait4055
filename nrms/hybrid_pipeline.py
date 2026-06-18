@@ -64,6 +64,7 @@ MAX_IMPRESSIONS = None
 K_VALUES = (5, 10)
 INCLUDE_OVERALL = True
 INCLUDE_USER_SEGMENTS = True
+INCLUDE_HISTORY_USER_SEGMENTS = True
 DEVICE = torch.device("cpu")
 
 HISTORY_GROUPS = (
@@ -188,6 +189,7 @@ def evaluate_hybrid(
     k_values=(5, 10),
     include_overall=True,
     train_user_ids=None,
+    include_history_user_segments=True,
 ):
     rows = {
         group_name: {
@@ -209,6 +211,14 @@ def evaluate_hybrid(
             "cluster_only": [],
             "hybrid": [],
         }
+        if include_history_user_segments:
+            for group_name, _, _ in HISTORY_GROUPS:
+                for user_segment in ("overlap_users", "unseen_users"):
+                    rows[f"{group_name}_{user_segment}"] = {
+                        "individual": [],
+                        "cluster_only": [],
+                        "hybrid": [],
+                    }
         rows["unseen_users"] = {
             "individual": [],
             "cluster_only": [],
@@ -240,11 +250,14 @@ def evaluate_hybrid(
         if include_overall:
             target_groups.append("overall")
         if train_user_ids is not None:
-            target_groups.append(
+            user_segment = (
                 "overlap_users"
                 if impression.user_id in train_user_ids
                 else "unseen_users"
             )
+            target_groups.append(user_segment)
+            if include_history_user_segments:
+                target_groups.append(f"{group}_{user_segment}")
 
         for target_group in target_groups:
             counts[target_group] += 1
@@ -332,6 +345,7 @@ def run_hybrid_evaluation(
     k_values=K_VALUES,
     include_overall=INCLUDE_OVERALL,
     include_user_segments=INCLUDE_USER_SEGMENTS,
+    include_history_user_segments=INCLUDE_HISTORY_USER_SEGMENTS,
     device=DEVICE,
 ):
     checkpoint_path = Path(checkpoint_path)
@@ -402,6 +416,7 @@ def run_hybrid_evaluation(
         k_values=k_values,
         include_overall=include_overall,
         train_user_ids=train_user_ids,
+        include_history_user_segments=include_history_user_segments,
     )
 
     report_path = write_report(report, output_dir)
