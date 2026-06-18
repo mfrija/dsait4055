@@ -27,35 +27,39 @@ MAX_VOCAB_SIZE = 30000
 BATCH_SIZE = 64
 EPOCHS = 5
 MAX_STEPS = None
-EVAL_IMPRESSIONS = 5000
-MODEL_PATH = "nrms_simple_glove.pt"
-CHECKPOINT_DIR = Path("checkpoints/nrms_glove")
-TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history_glove.json"
+EVAL_IMPRESSIONS = None
+MODEL_PATH = "nrms_300d.pt"
+CHECKPOINT_DIR = Path("checkpoints/nrms_300d")
+TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history.json"
 LOG_INTERVAL_STEPS = 50
 CHECKPOINT_INTERVAL_STEPS = None
 VALIDATION_K_VALUES = (5, 10)
 VALIDATION_NEWS_BATCH_SIZE = 512
 BEST_MODEL_METRIC = "auc"
 
-EMBEDDING_DIM = 100
-ATTENTION_HEADS = 4
+EMBEDDING_DIM = 300
+ATTENTION_HEADS = 6
 ATTENTION_HIDDEN_DIM = 200
 DROPOUT = 0.2
 LEARNING_RATE = 0.0001
 USE_GLOVE = True
-GLOVE_PATH = Path("data/GloVe/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt")
+GLOVE_PATH = Path(
+    "data/GloVe/"
+    "wiki_giga_2024_300_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05_combined.txt"
+)
 GLOVE_INIT_STD = 0.1
 
-# TO RUN FASTER
-ARTICLE_SIZE = 50
-HISTORY_SIZE = 30
-EMBEDDING_DIM = 100
-ATTENTION_HEADS = 4
-ATTENTION_HIDDEN_DIM = 128
-BATCH_SIZE = 128
-EPOCHS = 3
-MAX_STEPS = None
-EVAL_IMPRESSIONS = 1000
+
+def validate_training_config():
+    if EMBEDDING_DIM % ATTENTION_HEADS != 0:
+        raise ValueError(
+            "EMBEDDING_DIM must be divisible by ATTENTION_HEADS for "
+            f"torch.nn.MultiheadAttention; got {EMBEDDING_DIM} and {ATTENTION_HEADS}"
+        )
+    if ARTICLE_SIZE <= 0 or HISTORY_SIZE <= 0:
+        raise ValueError("ARTICLE_SIZE and HISTORY_SIZE must be positive")
+    if NEGATIVES_PER_POSITIVE <= 0:
+        raise ValueError("NEGATIVES_PER_POSITIVE must be positive")
 
 def keep_eval_items_unbatched(batch):
     return batch[0]
@@ -182,6 +186,7 @@ class NewsEncoder(nn.Module):
             word_vectors,
             word_vectors,
             key_padding_mask=padding_mask,
+            need_weights=False,
         )
 
         news_vectors = self.attention_pooling(contextual_words, word_mask)
@@ -220,6 +225,7 @@ class NRMS(nn.Module):
             clicked_vectors,
             clicked_vectors,
             key_padding_mask=padding_mask,
+            need_weights=False,
         )
 
         return self.user_attention_pooling(contextual_clicks, history_mask)
@@ -362,6 +368,7 @@ def evaluate_validation_fast(model, dataset, device, k_values=VALIDATION_K_VALUE
 
 
 def main():
+    validate_training_config()
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
@@ -468,6 +475,7 @@ def main():
             "eval_impressions": EVAL_IMPRESSIONS,
             "embedding_dim": EMBEDDING_DIM,
             "attention_heads": ATTENTION_HEADS,
+            "attention_head_dim": EMBEDDING_DIM // ATTENTION_HEADS,
             "attention_hidden_dim": ATTENTION_HIDDEN_DIM,
             "dropout": DROPOUT,
             "learning_rate": LEARNING_RATE,
@@ -497,7 +505,7 @@ def main():
             scores = model(history, candidates)
             loss = loss_function(scores, labels)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 
