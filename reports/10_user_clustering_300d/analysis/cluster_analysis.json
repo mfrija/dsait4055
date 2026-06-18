@@ -1,0 +1,187 @@
+{
+  "total_users": 49108,
+  "cluster_count": 10,
+  "cluster_sizes": {
+    "0": 4097,
+    "1": 6069,
+    "2": 5743,
+    "3": 4101,
+    "4": 4970,
+    "5": 4583,
+    "6": 5147,
+    "7": 4812,
+    "8": 3979,
+    "9": 5607
+  },
+  "largest_cluster_share": 0.12358475197523824,
+  "smallest_cluster_share": 0.08102549482772664,
+  "largest_to_smallest_ratio": 1.5252576024126665,
+  "silhouette_2d_pca_sampled": -0.0056790362732988455,
+  "content_summaries": [
+    {
+      "cluster": 0,
+      "user_count": 4097,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5144756672662745,
+      "top_categories": [
+        "news",
+        "finance",
+        "sports"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "newsworld",
+        "newscrime"
+      ]
+    },
+    {
+      "cluster": 1,
+      "user_count": 6069,
+      "dominant_category": "tv",
+      "dominant_category_share_among_listed": 0.1965408992707003,
+      "top_categories": [
+        "tv",
+        "news",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "tv-celebrity",
+        "newsus",
+        "lifestylebuzz"
+      ]
+    },
+    {
+      "cluster": 2,
+      "user_count": 5743,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.20687831829757844,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "foodanddrink"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "lifestylebuzz",
+        "foodnews"
+      ]
+    },
+    {
+      "cluster": 3,
+      "user_count": 4101,
+      "dominant_category": "sports",
+      "dominant_category_share_among_listed": 0.3322576859892044,
+      "top_categories": [
+        "sports",
+        "news",
+        "tv"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "newsus",
+        "newscrime"
+      ]
+    },
+    {
+      "cluster": 4,
+      "user_count": 4970,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.29203440011278725,
+      "top_categories": [
+        "news",
+        "autos",
+        "lifestyle"
+      ],
+      "top_subcategories": [
+        "newsus",
+        "autosenthusiasts",
+        "lifestylebuzz"
+      ]
+    },
+    {
+      "cluster": 5,
+      "user_count": 4583,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5936742092761595,
+      "top_categories": [
+        "news",
+        "finance",
+        "sports"
+      ],
+      "top_subcategories": [
+        "newspolitics",
+        "newsus",
+        "newsworld"
+      ]
+    },
+    {
+      "cluster": 6,
+      "user_count": 5147,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.3022026431718062,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "lifestyleroyals",
+        "newsus",
+        "tv-celebrity"
+      ]
+    },
+    {
+      "cluster": 7,
+      "user_count": 4812,
+      "dominant_category": "sports",
+      "dominant_category_share_among_listed": 0.4707534611288605,
+      "top_categories": [
+        "sports",
+        "news",
+        "finance"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "football_ncaa",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 8,
+      "user_count": 3979,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.3701816347124117,
+      "top_categories": [
+        "news",
+        "sports",
+        "finance"
+      ],
+      "top_subcategories": [
+        "football_nfl",
+        "newspolitics",
+        "newsus"
+      ]
+    },
+    {
+      "cluster": 9,
+      "user_count": 5607,
+      "dominant_category": "news",
+      "dominant_category_share_among_listed": 0.5018104908811055,
+      "top_categories": [
+        "news",
+        "lifestyle",
+        "tv"
+      ],
+      "top_subcategories": [
+        "newscrime",
+        "newsus",
+        "tv-celebrity"
+      ]
+    }
+  ],
+  "centroid_cosine_similarity": {
+    "mean_off_diagonal": 0.4255618751049042,
+    "max_off_diagonal": 0.7756972312927246,
+    "min_off_diagonal": 0.025692008435726166
+  }
+}
