@@ -1,0 +1,86 @@
+{
+  "config": {
+    "article_size": 80,
+    "history_size": 50,
+    "negative_per_positive": 4,
+    "max_vocab_size": 30000,
+    "batch_size": 64,
+    "epochs": 5,
+    "max_steps": null,
+    "eval_impressions": null,
+    "embedding_dim": 100,
+    "attention_heads": 4,
+    "attention_head_dim": 25,
+    "attention_hidden_dim": 200,
+    "dropout": 0.2,
+    "learning_rate": 0.0001,
+    "best_model_metric": "auc",
+    "validation_mode": "fast_precomputed_news",
+    "validation_news_batch_size": 512,
+    "use_glove": true,
+    "glove": {
+      "path": "data/GloVe/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt",
+      "embedding_dim": 100,
+      "matched_words": 28336,
+      "vocab_size": 30000,
+      "coverage": 0.944596306420428,
+      "wrong_dimension_matches": 2348
+    }
+  },
+  "epochs": [
+    {
+      "epoch": 1,
+      "step": 2905,
+      "loss": 1.462105727975422,
+      "validation": {
+        "impression_count": 29498,
+        "auc": 0.6210065172525082,
+        "mrr": 0.2973692630120614,
+        "ndcg@5": 0.27601853552017835,
+        "ndcg@10": 0.33758779431669905
+      },
+      "elapsed_minutes": 146.19929565588635
+    },
+    {
+      "epoch": 2,
+      "step": 5810,
+      "loss": 1.3791184126202294,
+      "validation": {
+        "impression_count": 29498,
+        "auc": 0.6333506231879483,
+        "mrr": 0.30949078907258526,
+        "ndcg@5": 0.28662523052973377,
+        "ndcg@10": 0.34883319509615895
+      },
+      "elapsed_minutes": 148.93856013615925
+    },
+    {
+      "epoch": 3,
+      "step": 8715,
+      "loss": 1.35444616754371,
+      "validation": {
+        "impression_count": 29498,
+        "auc": 0.6376933654022898,
+        "mrr": 0.3137583479211288,
+        "ndcg@5": 0.2905868091318162,
+        "ndcg@10": 0.3543704479148997
+      },
+      "elapsed_minutes": 151.01439311504365
+    }
+  ],
+  "best_epoch": 3,
+  "best_metric_value": 0.6376933654022898,
+  "best_model_path": "nrms_100d.pt",
+  "data_split": {
+    "strategy": "mind_last_training_day",
+    "train_behavior_rows": 126695,
+    "validation_behavior_rows": 30270,
+    "train_start": "2019-11-09T00:00:19",
+    "train_end": "2019-11-13T23:59:21",
+    "validation_start": "2019-11-14T00:00:00",
+    "validation_end": "2019-11-14T23:59:13",
+    "validation_date": "2019-11-14",
+    "source": "data/mind-small/MINDsmall_train/MINDsmall_train/behaviors.tsv",
+    "final_evaluation_split": "MINDsmall_dev"
+  }
+}
