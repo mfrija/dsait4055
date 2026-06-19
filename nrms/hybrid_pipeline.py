@@ -47,10 +47,25 @@ MODEL_CONFIGS = {
         "training_history_path": Path("checkpoints/nrms_100d/training_history.json"),
         "cluster_dir": Path("reports/10_user_clustering_100d"),
     },
-    "300d": {
+    "3_300d": {
         "checkpoint_path": Path("nrms_300d.pt"),
         "training_history_path": Path("checkpoints/nrms_300d/training_history.json"),
-        "cluster_dir": Path("reports/user_clustering_300d"),
+        "cluster_dir": Path("reports/3_user_clustering_300d"),
+    },
+    "5_300d": {
+        "checkpoint_path": Path("nrms_300d.pt"),
+        "training_history_path": Path("checkpoints/nrms_300d/training_history.json"),
+        "cluster_dir": Path("reports/5_user_clustering_300d"),
+    },
+    "8_300d": {
+        "checkpoint_path": Path("nrms_300d.pt"),
+        "training_history_path": Path("checkpoints/nrms_300d/training_history.json"),
+        "cluster_dir": Path("reports/8_user_clustering_300d"),
+    },
+    "10_300d": {
+        "checkpoint_path": Path("nrms_300d.pt"),
+        "training_history_path": Path("checkpoints/nrms_300d/training_history.json"),
+        "cluster_dir": Path("reports/10_user_clustering_300d"),
     },
 }
 
