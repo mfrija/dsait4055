@@ -20,6 +20,8 @@ PAD_WORD = nrms_data.PAD_WORD
 
 
 DATA_DIR = Path("data/mind-small")
+
+# Active 100d configuration.
 ARTICLE_SIZE = 80
 HISTORY_SIZE = 50
 NEGATIVES_PER_POSITIVE = 4
@@ -28,8 +30,8 @@ BATCH_SIZE = 64
 EPOCHS = 5
 MAX_STEPS = None
 EVAL_IMPRESSIONS = None
-MODEL_PATH = "nrms_300d.pt"
-CHECKPOINT_DIR = Path("checkpoints/nrms_300d")
+MODEL_PATH = "nrms_100d.pt"
+CHECKPOINT_DIR = Path("checkpoints/nrms_100d")
 TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history.json"
 LOG_INTERVAL_STEPS = 50
 CHECKPOINT_INTERVAL_STEPS = None
@@ -37,17 +39,48 @@ VALIDATION_K_VALUES = (5, 10)
 VALIDATION_NEWS_BATCH_SIZE = 512
 BEST_MODEL_METRIC = "auc"
 
-EMBEDDING_DIM = 300
-ATTENTION_HEADS = 6
+EMBEDDING_DIM = 100
+ATTENTION_HEADS = 4
 ATTENTION_HIDDEN_DIM = 200
 DROPOUT = 0.2
 LEARNING_RATE = 0.0001
 USE_GLOVE = True
 GLOVE_PATH = Path(
     "data/GloVe/"
-    "wiki_giga_2024_300_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05_combined.txt"
+    "wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt"
 )
 GLOVE_INIT_STD = 0.1
+
+# Full 300d configuration. Comment out the active block above and uncomment
+# this block to run the 300d experiment.
+# ARTICLE_SIZE = 80
+# HISTORY_SIZE = 50
+# NEGATIVES_PER_POSITIVE = 4
+# MAX_VOCAB_SIZE = 30000
+# BATCH_SIZE = 64
+# EPOCHS = 5
+# MAX_STEPS = None
+# EVAL_IMPRESSIONS = None
+# MODEL_PATH = "nrms_300d.pt"
+# CHECKPOINT_DIR = Path("checkpoints/nrms_300d")
+# TRAINING_HISTORY_PATH = CHECKPOINT_DIR / "training_history.json"
+# LOG_INTERVAL_STEPS = 50
+# CHECKPOINT_INTERVAL_STEPS = None
+# VALIDATION_K_VALUES = (5, 10)
+# VALIDATION_NEWS_BATCH_SIZE = 512
+# BEST_MODEL_METRIC = "auc"
+#
+# EMBEDDING_DIM = 300
+# ATTENTION_HEADS = 6
+# ATTENTION_HIDDEN_DIM = 200
+# DROPOUT = 0.2
+# LEARNING_RATE = 0.0001
+# USE_GLOVE = True
+# GLOVE_PATH = Path(
+#     "data/GloVe/"
+#     "wiki_giga_2024_300_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05_combined.txt"
+# )
+# GLOVE_INIT_STD = 0.1
 
 
 def validate_training_config():
